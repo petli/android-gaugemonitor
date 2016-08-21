@@ -56,7 +56,7 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
         FrameLayout preview = (FrameLayout) findViewById(R.id.camera_preview);
         preview.addView(_preview);
 
-        _camera.setPreviewCallback(this);
+        _camera.setPreviewCallbackWithBuffer(this);
 
     }
 
@@ -126,5 +126,6 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
         Camera.Size previewSize = camera.getParameters().getPreviewSize();
         _image.updateImage(data, previewSize.width, previewSize.height);
         _gaugeView.invalidate();
+        _camera.addCallbackBuffer(data);
     }
 }
