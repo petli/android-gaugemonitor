@@ -11,8 +11,10 @@ import android.view.MenuItem;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
-import java.util.List;
+import se.klavrekod.gaugemonitor.gaugeview.GaugeView;
+import se.klavrekod.gaugemonitor.gaugeview.PanZoomController;
 
+@SuppressWarnings("deprecation")
 public class MainActivity extends AppCompatActivity implements Camera.PreviewCallback {
     private static final String TAG = "GM:MainActivity";
 
@@ -27,10 +29,6 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-
-        _image = new GaugeImage();
-        _gaugeView = (GaugeView) findViewById(R.id.gauge_view);
-        _gaugeView.setImage(_image);
 
         // Create an instance of Camera
         _camera = getCameraInstance();
@@ -51,13 +49,17 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
 
         _camera.setParameters(parameters);
 
-        // Create our Preview view and set it as the content of our activity.
         _preview = new CameraPreview(this, _camera);
         FrameLayout preview = (FrameLayout) findViewById(R.id.camera_preview);
         preview.addView(_preview);
 
         _camera.setPreviewCallbackWithBuffer(this);
 
+        _image = new GaugeImage(parameters.getPreviewSize().width, parameters.getPreviewSize().height);
+        _gaugeView = (GaugeView) findViewById(R.id.gauge_view);
+        _gaugeView.setImage(_image);
+
+        _gaugeView.setController(new PanZoomController(_gaugeView, _image));
     }
 
     @Override
@@ -123,8 +125,7 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
 
     @Override
     public void onPreviewFrame(byte[] data, Camera camera) {
-        Camera.Size previewSize = camera.getParameters().getPreviewSize();
-        _image.updateImage(data, previewSize.width, previewSize.height);
+        _image.updateImage(data);
         _gaugeView.invalidate();
         _camera.addCallbackBuffer(data);
     }

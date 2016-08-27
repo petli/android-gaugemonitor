@@ -7,29 +7,43 @@ import android.graphics.Color;
  * Model: holding the current gauge image, and its pan/zoom setting.
  */
 public class GaugeImage {
+    public static final float CIRCLE_RADIUS = 0.33f;
+
     private Bitmap _bitmap;
+
+    // Center is tracked as ratio of the width/height in the range [0.0-1.0]
     private float _centerX;
     private float _centerY;
+
     private float _scale;
 
-    public GaugeImage() {
+    // Source image size
+    private int _width;
+    private int _height;
+
+    public GaugeImage(int width, int height) {
+        _width = width;
+        _height = height;
         _centerX = _centerY = 0.5f;
         _scale = 1;
+
+        _bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
     }
 
-    public void updateImage(byte[] dataNv21, int w, int h) {
+    public void updateImage(byte[] dataNv21) {
         // Copy the full image in gray scale into the bitmap
-        int[] colors = new int[w * h];
-        int i = 0;
 
-        for (int x = 0; x < w; x++) {
-            for (int y = 0; y < h; y++) {
-                colors[i] = Color.rgb(dataNv21[i], dataNv21[i], dataNv21[i]);
-                i++;
+        // Row-by-row, as a balance between memory allocation and bitmap calls
+        int[] colors = new int[_width];
+
+        for (int y = 0; y < _height; y++) {
+            for (int x = 0; x < _width; x++) {
+                byte brightness = dataNv21[y * _width + x];
+                colors[x] = Color.rgb(brightness, brightness, brightness);
             }
-        }
 
-        _bitmap = Bitmap.createBitmap(colors, w, h, Bitmap.Config.ARGB_8888);
+            _bitmap.setPixels(colors, 0, _width, 0, y, _width, 1);
+        }
     }
 
     public Bitmap getBitmap() {
@@ -58,5 +72,13 @@ public class GaugeImage {
 
     public void setScale(float _scale) {
         this._scale = _scale;
+    }
+
+    public int getWidth() {
+        return _width;
+    }
+
+    public int getHeight() {
+        return _height;
     }
 }
