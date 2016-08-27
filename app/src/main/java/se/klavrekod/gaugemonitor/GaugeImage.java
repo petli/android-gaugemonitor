@@ -31,15 +31,18 @@ public class GaugeImage {
     }
 
     public void updateImage(byte[] dataNv21) {
-        // Copy the full image in gray scale into the bitmap
+        // Copy the full image in grayscale into the bitmap
 
         // Row-by-row, as a balance between memory allocation and bitmap calls
         int[] colors = new int[_width];
 
         for (int y = 0; y < _height; y++) {
             for (int x = 0; x < _width; x++) {
-                byte brightness = dataNv21[y * _width + x];
-                colors[x] = Color.rgb(brightness, brightness, brightness);
+                int raw = dataNv21[y * _width + x];
+                if (raw < 0) {
+                    raw = 256 + raw;
+                }
+                colors[x] = Color.rgb(raw, raw, raw);
             }
 
             _bitmap.setPixels(colors, 0, _width, 0, y, _width, 1);
