@@ -39,6 +39,21 @@ public class PanZoomController
     }
 
     @Override
+    public int imageRefreshDelay() {
+        // Continuous refresh
+        return 0;
+    }
+
+    @Override
+    public void onStart() {
+    }
+
+    @Override
+    public void onStop() {
+        updateImagePosition();
+    }
+
+    @Override
     public boolean onTouchEvent(MotionEvent event) {
         // Workaround for pre-Jellybean, from http://stackoverflow.com/a/13807698
         float origX = event.getX();
@@ -61,7 +76,6 @@ public class PanZoomController
 
         drawMatrix.postTranslate(-distanceX, -distanceY);
         _view.setDrawMatrix(drawMatrix);
-        updateImagePosition(drawMatrix);
         return true;
     }
 
@@ -107,16 +121,14 @@ public class PanZoomController
 
     @Override
     public void onScaleEnd(ScaleGestureDetector detector) {
-        updateImagePosition(_view.getDrawMatrix());
     }
 
     /**
      * Calculate the new image position coordinates from a draw matrix.
-     * @param drawMatrix
      */
-    private void updateImagePosition(Matrix drawMatrix) {
+    private void updateImagePosition() {
         float[] values = new float[9];
-        drawMatrix.getValues(values);
+        _view.getDrawMatrix().getValues(values);
 
         float scale = values[Matrix.MSCALE_X];
         float transX = values[Matrix.MTRANS_X];

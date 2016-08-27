@@ -12,6 +12,8 @@ import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import se.klavrekod.gaugemonitor.gaugeview.GaugeView;
+import se.klavrekod.gaugemonitor.gaugeview.IGaugeViewController;
+import se.klavrekod.gaugemonitor.gaugeview.MonitorController;
 import se.klavrekod.gaugemonitor.gaugeview.PanZoomController;
 
 @SuppressWarnings("deprecation")
@@ -22,6 +24,7 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
     private CameraPreview _preview;
     private GaugeView _gaugeView;
     private GaugeImage _image;
+    private IGaugeViewController _gaugeViewController;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,6 +35,9 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+
+        // Default mode
+        _gaugeViewController = new MonitorController();
     }
 
     @Override
@@ -82,7 +88,8 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
             _gaugeView.setImage(_image);
         }
 
-        _gaugeView.setController(new PanZoomController(_gaugeView, _image));
+        _gaugeViewController.onStart();
+        _gaugeView.setController(_gaugeViewController);
 
         _camera.setPreviewCallbackWithBuffer(this);
     }
@@ -92,6 +99,8 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
         super.onStop();
 
         Log.d(TAG, "onStop");
+
+        _gaugeViewController.onStop();
 
         FrameLayout preview = (FrameLayout) findViewById(R.id.camera_preview);
         preview.removeView(_preview);
@@ -106,6 +115,22 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
+
+        // Refresh is only visible in monitor mode
+        MenuItem refresh = menu.findItem(R.id.action_refresh);
+        refresh.setVisible(false);
+
+        if (_gaugeViewController instanceof MonitorController) {
+            refresh.setVisible(true);
+
+            MenuItem monitor = menu.findItem(R.id.action_monitor);
+            monitor.setVisible(false);
+        }
+        else if (_gaugeViewController instanceof PanZoomController) {
+            MenuItem panZoom = menu.findItem(R.id.action_pan_zoom);
+            panZoom.setVisible(false);
+        }
+
         return true;
     }
 
@@ -116,12 +141,40 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
         // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
 
-        //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
             return true;
         }
 
+        if (id == R.id.action_pan_zoom) {
+            Log.d(TAG, "Switching to pan/zoom controller");
+            changeGaugeViewController(new PanZoomController(_gaugeView, _image));
+            return true;
+        }
+
+        if (id == R.id.action_monitor) {
+            Log.d(TAG, "Switching to monitor controller");
+            changeGaugeViewController(new MonitorController());
+            return true;
+        }
+
+        if (id == R.id.action_refresh) {
+            Log.d(TAG, "Refreshing");
+            return true;
+        }
+
         return super.onOptionsItemSelected(item);
+    }
+
+    private void changeGaugeViewController(IGaugeViewController newController) {
+        if (_gaugeViewController != null) {
+            _gaugeViewController.onStop();
+        }
+
+        _gaugeViewController = newController;
+        _gaugeViewController.onStart();
+
+        _gaugeView.setController(_gaugeViewController);
+        supportInvalidateOptionsMenu();
     }
 
     private void releaseCamera(){
