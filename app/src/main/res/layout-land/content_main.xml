@@ -19,6 +19,14 @@
         android:layout_centerVertical="true"
         android:layout_centerHorizontal="true">
 
+        <se.klavrekod.gaugemonitor.gaugeview.GaugeView
+            android:layout_width="fill_parent"
+            android:layout_height="fill_parent"
+            android:id="@+id/gauge_view"
+            android:layout_gravity="right|center_vertical"
+            android:layout_weight="1"
+            android:background="#000000" />
+
         <FrameLayout
             android:layout_width="fill_parent"
             android:layout_height="fill_parent"
@@ -27,14 +35,6 @@
             android:id="@+id/camera_preview">
 
         </FrameLayout>
-
-        <se.klavrekod.gaugemonitor.gaugeview.GaugeView
-            android:layout_width="fill_parent"
-            android:layout_height="fill_parent"
-            android:id="@+id/gauge_view"
-            android:layout_gravity="right|center_vertical"
-            android:layout_weight="1"
-            android:background="#000000" />
 
     </LinearLayout>
 </RelativeLayout>

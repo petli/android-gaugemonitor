@@ -1,7 +1,6 @@
 package se.klavrekod.gaugemonitor;
 
 import android.content.Context;
-import android.graphics.ImageFormat;
 import android.hardware.Camera;
 import android.util.Log;
 import android.view.SurfaceHolder;
@@ -12,6 +11,7 @@ import java.io.IOException;
 /**
  * Basically the example from https://developer.android.com/guide/topics/media/camera.html#custom-camera
  */
+@SuppressWarnings("deprecation")
 public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback {
     private static final String TAG = "GM:CameraPreview";
 
@@ -36,7 +36,6 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
             Log.d(TAG, "Surface created, starting preview");
             mCamera.setPreviewDisplay(holder);
             mCamera.startPreview();
-            addCallbackBuffer();
         } catch (IOException e) {
             Log.e(TAG, "Error setting camera preview: " + e.getMessage());
         }
@@ -69,19 +68,8 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         try {
             mCamera.setPreviewDisplay(mHolder);
             mCamera.startPreview();
-            addCallbackBuffer();
         } catch (Exception e){
             Log.d(TAG, "Error starting camera preview: " + e.getMessage());
         }
-    }
-
-    private void addCallbackBuffer()
-    {
-        Camera.Parameters parameters = mCamera.getParameters();
-        Camera.Size size = parameters.getPreviewSize();
-        int bitsPerPixel = ImageFormat.getBitsPerPixel(parameters.getPreviewFormat());
-
-        Log.d(TAG, "Adding buffer for preview size: " + size.width + "x" + size.height + " bits/pixel: " + bitsPerPixel);
-        mCamera.addCallbackBuffer(new byte[(size.width * size.height * bitsPerPixel) / 8]);
     }
 }

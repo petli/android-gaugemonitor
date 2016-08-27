@@ -14,22 +14,25 @@
     tools:context="se.klavrekod.gaugemonitor.MainActivity">
 
     <LinearLayout
+        android:orientation="vertical"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_centerVertical="true"
-        android:layout_centerHorizontal="true">
+        android:layout_gravity="center_horizontal|top">
+
+        <se.klavrekod.gaugemonitor.gaugeview.GaugeView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/gauge_view"
+            android:layout_gravity="center_horizontal|bottom"
+            android:layout_weight="1" />
 
         <FrameLayout
             android:layout_width="fill_parent"
             android:layout_height="fill_parent"
             android:layout_gravity="center_horizontal"
             android:layout_weight="1"
-            android:id="@+id/camera_preview"></FrameLayout>
+            android:id="@+id/camera_preview">
 
-        <SurfaceView
-            android:layout_width="fill_parent"
-            android:layout_height="fill_parent"
-            android:layout_gravity="center_horizontal"
-            android:layout_weight="1" />
+        </FrameLayout>
     </LinearLayout>
 </RelativeLayout>

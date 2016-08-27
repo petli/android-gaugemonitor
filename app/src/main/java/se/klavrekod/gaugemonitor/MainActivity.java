@@ -26,16 +26,31 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        Log.d(TAG, "onCreate");
+
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+    }
 
-        // Create an instance of Camera
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+
+        Log.d(TAG, "onDestroy");
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+
+        Log.d(TAG, "onStart");
+
         _camera = getCameraInstance();
-
         if (_camera == null)
         {
-            Toast.makeText(getApplicationContext(), "Cannot get camera, giving up", Toast.LENGTH_LONG);
+            Toast.makeText(getApplicationContext(), "Cannot get camera, giving up", Toast.LENGTH_LONG).show();
             return;
         }
 
@@ -49,22 +64,41 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
 
         _camera.setParameters(parameters);
 
+        Camera.Size size = parameters.getPreviewSize();
+        int bitsPerPixel = ImageFormat.getBitsPerPixel(parameters.getPreviewFormat());
+
+        Log.d(TAG, "Adding buffer for preview size: " + size.width + "x" + size.height + " bits/pixel: " + bitsPerPixel);
+        _camera.addCallbackBuffer(new byte[(size.width * size.height * bitsPerPixel) / 8]);
+
         _preview = new CameraPreview(this, _camera);
-        FrameLayout preview = (FrameLayout) findViewById(R.id.camera_preview);
-        preview.addView(_preview);
+        FrameLayout previewFrame = (FrameLayout) findViewById(R.id.camera_preview);
+        if (previewFrame != null) {
+            previewFrame.addView(_preview);
+        }
 
-        _camera.setPreviewCallbackWithBuffer(this);
-
-        _image = new GaugeImage(parameters.getPreviewSize().width, parameters.getPreviewSize().height);
+        _image = new GaugeImage(size.width, size.height);
         _gaugeView = (GaugeView) findViewById(R.id.gauge_view);
-        _gaugeView.setImage(_image);
+        if (_gaugeView != null) {
+            _gaugeView.setImage(_image);
+        }
 
         _gaugeView.setController(new PanZoomController(_gaugeView, _image));
+
+        _camera.setPreviewCallbackWithBuffer(this);
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
+    protected void onStop() {
+        super.onStop();
+
+        Log.d(TAG, "onStop");
+
+        FrameLayout preview = (FrameLayout) findViewById(R.id.camera_preview);
+        preview.removeView(_preview);
+        _preview = null;
+
+        _gaugeView = null;
+
         releaseCamera();
     }
 
@@ -92,7 +126,7 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
 
     private void releaseCamera(){
         if (_camera != null){
-            _camera.setPreviewCallback(null);
+            _camera.setPreviewCallbackWithBuffer(null);
             _camera.release();
             _camera = null;
         }
