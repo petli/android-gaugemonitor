@@ -2,19 +2,27 @@ package se.klavrekod.gaugemonitor;
 
 import android.graphics.ImageFormat;
 import android.hardware.Camera;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.text.format.Formatter;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+
 import se.klavrekod.gaugemonitor.gaugeview.GaugeView;
 import se.klavrekod.gaugemonitor.gaugeview.IGaugeViewController;
 import se.klavrekod.gaugemonitor.gaugeview.MonitorController;
 import se.klavrekod.gaugemonitor.gaugeview.PanZoomController;
+import se.klavrekod.gaugemonitor.server.HttpServer;
+import se.klavrekod.gaugemonitor.server.ImageResourceContainer;
 
 @SuppressWarnings("deprecation")
 public class MainActivity extends AppCompatActivity implements ICameraPreviewStatusListener {
@@ -26,6 +34,8 @@ public class MainActivity extends AppCompatActivity implements ICameraPreviewSta
     private GaugeImage _image;
     private IGaugeViewController _gaugeViewController;
     private Runnable _scheduledPreview;
+    private ImageResourceContainer _imageResourceContainer;
+    private HttpServer _httpServer;
 
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -38,6 +48,28 @@ public class MainActivity extends AppCompatActivity implements ICameraPreviewSta
 
         // Default mode
         _gaugeViewController = new MonitorController();
+
+        _imageResourceContainer = new ImageResourceContainer();
+        try {
+            String ip = "<unknown>";
+            int port = 7980;
+
+            // TODO: figure this out properly, and react when wifi address change
+            WifiManager wm = (WifiManager) getSystemService(WIFI_SERVICE);
+            if (wm != null) {
+                ip = Formatter.formatIpAddress(wm.getConnectionInfo().getIpAddress());
+            }
+
+            String url = "http://" + ip + ":" + port;
+            Log.i(TAG, "Starting server on " + url);
+            Toast.makeText(getApplicationContext(), "Server URL: " + url, Toast.LENGTH_LONG).show();
+
+            _httpServer = new HttpServer(_imageResourceContainer);
+            _httpServer.start(port);
+        } catch (IOException e) {
+            Log.e(TAG, "Error starting HTTP server", e);
+            Toast.makeText(getApplicationContext(), "Error starting HTTP server: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     @Override
@@ -45,6 +77,13 @@ public class MainActivity extends AppCompatActivity implements ICameraPreviewSta
         super.onDestroy();
 
         Log.d(TAG, "onDestroy");
+
+        if (_httpServer != null) {
+            _httpServer.stop();
+            _httpServer = null;
+        }
+
+        _imageResourceContainer = null;
     }
 
     @Override
@@ -88,6 +127,8 @@ public class MainActivity extends AppCompatActivity implements ICameraPreviewSta
         _gaugeViewController.onStart();
         _gaugeView.setController(_gaugeViewController);
         _scheduledPreview = null;
+
+        _imageResourceContainer.setImage(_image);
     }
 
     @Override
