@@ -17,10 +17,12 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
     private SurfaceHolder mHolder;
     private Camera mCamera;
+    private ICameraPreviewStatusListener _cameraPreviewStatusListener;
 
-    public CameraPreview(Context context, Camera camera) {
+    public CameraPreview(Context context, Camera camera, ICameraPreviewStatusListener cameraPreviewStatusListener) {
         super(context);
         mCamera = camera;
+        _cameraPreviewStatusListener = cameraPreviewStatusListener;
 
         // Install a SurfaceHolder.Callback so we get notified when the
         // underlying surface is created and destroyed.
@@ -36,6 +38,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
             Log.d(TAG, "Surface created, starting preview");
             mCamera.setPreviewDisplay(holder);
             mCamera.startPreview();
+            _cameraPreviewStatusListener.onPreviewStatusChanged(true);
         } catch (IOException e) {
             Log.e(TAG, "Error setting camera preview: " + e.getMessage());
         }
@@ -56,6 +59,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
         // stop preview before making changes
         try {
+            _cameraPreviewStatusListener.onPreviewStatusChanged(false);
             mCamera.stopPreview();
         } catch (Exception e){
             // ignore: tried to stop a non-existent preview
@@ -68,6 +72,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         try {
             mCamera.setPreviewDisplay(mHolder);
             mCamera.startPreview();
+            _cameraPreviewStatusListener.onPreviewStatusChanged(true);
         } catch (Exception e){
             Log.d(TAG, "Error starting camera preview: " + e.getMessage());
         }

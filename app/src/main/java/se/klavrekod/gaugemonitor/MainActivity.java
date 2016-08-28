@@ -17,7 +17,7 @@ import se.klavrekod.gaugemonitor.gaugeview.MonitorController;
 import se.klavrekod.gaugemonitor.gaugeview.PanZoomController;
 
 @SuppressWarnings("deprecation")
-public class MainActivity extends AppCompatActivity implements Camera.PreviewCallback {
+public class MainActivity extends AppCompatActivity implements ICameraPreviewStatusListener {
     private static final String TAG = "GM:MainActivity";
 
     private Camera _camera;
@@ -25,8 +25,8 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
     private GaugeView _gaugeView;
     private GaugeImage _image;
     private IGaugeViewController _gaugeViewController;
+    private Runnable _scheduledPreview;
 
-    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
@@ -61,27 +61,24 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
         }
 
         Camera.Parameters parameters = _camera.getParameters();
-        if (!trySetFocusMode(parameters, Camera.Parameters.FOCUS_MODE_MACRO))
+        if (!trySetFocusMode(parameters, Camera.Parameters.FOCUS_MODE_AUTO))
         {
             Log.i(TAG, "Using default focus mode " + parameters.getFocusMode());
         }
 
+        // Format that must be supported by all cameras, and usefully it gets us
+        // luminance as a separate component without having to deal with RGB
         parameters.setPreviewFormat(ImageFormat.NV21);
 
         _camera.setParameters(parameters);
 
-        Camera.Size size = parameters.getPreviewSize();
-        int bitsPerPixel = ImageFormat.getBitsPerPixel(parameters.getPreviewFormat());
-
-        Log.d(TAG, "Adding buffer for preview size: " + size.width + "x" + size.height + " bits/pixel: " + bitsPerPixel);
-        _camera.addCallbackBuffer(new byte[(size.width * size.height * bitsPerPixel) / 8]);
-
-        _preview = new CameraPreview(this, _camera);
+        _preview = new CameraPreview(this, _camera, this);
         FrameLayout previewFrame = (FrameLayout) findViewById(R.id.camera_preview);
         if (previewFrame != null) {
             previewFrame.addView(_preview);
         }
 
+        Camera.Size size = parameters.getPreviewSize();
         _image = new GaugeImage(size.width, size.height);
         _gaugeView = (GaugeView) findViewById(R.id.gauge_view);
         if (_gaugeView != null) {
@@ -90,8 +87,7 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
 
         _gaugeViewController.onStart();
         _gaugeView.setController(_gaugeViewController);
-
-        _camera.setPreviewCallbackWithBuffer(this);
+        _scheduledPreview = null;
     }
 
     @Override
@@ -103,8 +99,12 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
         _gaugeViewController.onStop();
 
         FrameLayout preview = (FrameLayout) findViewById(R.id.camera_preview);
-        preview.removeView(_preview);
+        if (preview != null) {
+            preview.removeView(_preview);
+        }
         _preview = null;
+
+        cancelCurrentPreview();
 
         _gaugeView = null;
 
@@ -159,10 +159,22 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
 
         if (id == R.id.action_refresh) {
             Log.d(TAG, "Refreshing");
+            restartPreviewCallback(1);
             return true;
         }
 
         return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public void onPreviewStatusChanged(boolean running) {
+        if (running) {
+            // Give it a second to get going
+            restartPreviewCallback(1000);
+        }
+        else {
+            cancelCurrentPreview();
+        }
     }
 
     private void changeGaugeViewController(IGaugeViewController newController) {
@@ -175,11 +187,38 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
 
         _gaugeView.setController(_gaugeViewController);
         supportInvalidateOptionsMenu();
+
+        restartPreviewCallback(1);
+    }
+
+    private void cancelCurrentPreview() {
+        if (_scheduledPreview != null)
+        {
+            _gaugeView.removeCallbacks(_scheduledPreview);
+            _scheduledPreview = null;
+        }
+        _camera.cancelAutoFocus();
+        _camera.setPreviewCallbackWithBuffer(null);
+        _camera.setOneShotPreviewCallback(null);
+    }
+
+    private void restartPreviewCallback(int forceDelay) {
+        cancelCurrentPreview();
+
+        int delay = _gaugeViewController.imageRefreshDelay();
+
+        if (delay == 0) {
+            new BufferedPreviewCallback();
+        }
+        else if (delay > 0) {
+            _scheduledPreview = new OneShotPreviewCallback();
+            _gaugeView.postDelayed(_scheduledPreview, forceDelay > 0 ? forceDelay : delay);
+        }
     }
 
     private void releaseCamera(){
         if (_camera != null){
-            _camera.setPreviewCallbackWithBuffer(null);
+            cancelCurrentPreview();
             _camera.release();
             _camera = null;
         }
@@ -198,22 +237,64 @@ public class MainActivity extends AppCompatActivity implements Camera.PreviewCal
     }
 
     public static boolean trySetFocusMode(Camera.Parameters parameters, String wantedMode) {
-        for (String mode : parameters.getSupportedFocusModes()) {
-            if (mode.equals(wantedMode))
-            {
-                Log.i(TAG, "Set focus mode to " + wantedMode);
-                parameters.setFocusMode(wantedMode);
-                return true;
-            }
+        if (parameters.getSupportedFocusModes().contains(wantedMode))
+        {
+            Log.i(TAG, "Set focus mode to " + wantedMode);
+            parameters.setFocusMode(wantedMode);
+            return true;
         }
 
         return false;
     }
 
-    @Override
-    public void onPreviewFrame(byte[] data, Camera camera) {
-        _image.updateImage(data);
-        _gaugeView.invalidate();
-        _camera.addCallbackBuffer(data);
+    private class OneShotPreviewCallback implements Runnable, Camera.PreviewCallback, Camera.AutoFocusCallback {
+        @Override
+        public void run() {
+            _scheduledPreview = null;
+            Log.d(TAG, "OneShotPreviewCallback starting autofocus");
+            try {
+                _camera.autoFocus(this);
+            }
+            catch (RuntimeException e) {
+                Log.e(TAG, "Autofocus failed, rescheduling", e);
+                restartPreviewCallback(5000);
+            }
+        }
+
+        @Override
+        public void onAutoFocus(boolean success, Camera camera) {
+            if (success) {
+                Log.d(TAG, "Autofocus successful, getting picture");
+                _camera.setOneShotPreviewCallback(this);
+            }
+            else
+            {
+                Log.e(TAG, "Autofocus not successful, rescheduling");
+                restartPreviewCallback(5000);
+            }
+        }
+
+        @Override
+        public void onPreviewFrame(byte[] data, Camera camera) {
+            Log.d(TAG, "Got one shot preview frame ");
+            _image.updateImage(data);
+            _gaugeView.invalidate();
+            restartPreviewCallback(0);
+        }
+    }
+
+    private class BufferedPreviewCallback implements Camera.PreviewCallback {
+        public BufferedPreviewCallback() {
+            int bitsPerPixel = ImageFormat.getBitsPerPixel(ImageFormat.NV21);
+            _camera.addCallbackBuffer(new byte[(_image.getWidth() * _image.getHeight() * bitsPerPixel) / 8]);
+            _camera.setPreviewCallbackWithBuffer(this);
+        }
+
+        @Override
+        public void onPreviewFrame(byte[] data, Camera camera) {
+            _image.updateImage(data);
+            _gaugeView.invalidate();
+            _camera.addCallbackBuffer(data);
+        }
     }
 }
