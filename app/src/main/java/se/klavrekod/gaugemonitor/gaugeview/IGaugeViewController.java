@@ -1,18 +1,15 @@
 package se.klavrekod.gaugemonitor.gaugeview;
 
+import android.hardware.Camera;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.MotionEvent;
 
 public interface IGaugeViewController {
     /**
-     * Control when the image should next refresh
-     * @return Delay in ms. 0 means continuous, -1 means don't refresh.
-     */
-    int imageRefreshDelay();
-
-    /**
      * Called when this controller will start controlling the view.
      */
-    void onStart();
+    void onStart(Camera _camera);
 
     /**
      * Called when this controller will stop controlling the view.
@@ -21,8 +18,17 @@ public interface IGaugeViewController {
 
     /**
      * Handle any touch events in the view.
+     *
      * @param event
      * @return
      */
     boolean onTouchEvent(MotionEvent event);
+
+    /**
+     * The controller can use this to disable menu items not relevant to it.
+     * @param menu
+     */
+    void onCreateOptionsMenu(Menu menu);
+
+    boolean onOptionsItemSelected(MenuItem item);
 }

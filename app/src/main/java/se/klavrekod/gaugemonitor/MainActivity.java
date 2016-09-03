@@ -10,12 +10,11 @@ import android.text.format.Formatter;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import java.io.IOException;
-import java.net.Inet4Address;
-import java.net.InetAddress;
 
 import se.klavrekod.gaugemonitor.gaugeview.GaugeView;
 import se.klavrekod.gaugemonitor.gaugeview.IGaugeViewController;
@@ -33,7 +32,6 @@ public class MainActivity extends AppCompatActivity implements ICameraPreviewSta
     private GaugeView _gaugeView;
     private GaugeImage _image;
     private IGaugeViewController _gaugeViewController;
-    private Runnable _scheduledPreview;
     private ImageResourceContainer _imageResourceContainer;
     private HttpServer _httpServer;
 
@@ -45,9 +43,6 @@ public class MainActivity extends AppCompatActivity implements ICameraPreviewSta
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-
-        // Default mode
-        _gaugeViewController = new MonitorController();
 
         _imageResourceContainer = new ImageResourceContainer();
         try {
@@ -92,6 +87,10 @@ public class MainActivity extends AppCompatActivity implements ICameraPreviewSta
 
         Log.d(TAG, "onStart");
 
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON |
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
+
         _camera = getCameraInstance();
         if (_camera == null)
         {
@@ -124,9 +123,15 @@ public class MainActivity extends AppCompatActivity implements ICameraPreviewSta
             _gaugeView.setImage(_image);
         }
 
-        _gaugeViewController.onStart();
-        _gaugeView.setController(_gaugeViewController);
-        _scheduledPreview = null;
+        if (_gaugeViewController == null) {
+            // Default mode
+            _gaugeViewController = new MonitorController(_gaugeView, _image);
+            supportInvalidateOptionsMenu();
+        }
+
+        if (_gaugeView != null) {
+            _gaugeView.setController(_gaugeViewController);
+        }
 
         _imageResourceContainer.setImage(_image);
     }
@@ -137,15 +142,15 @@ public class MainActivity extends AppCompatActivity implements ICameraPreviewSta
 
         Log.d(TAG, "onStop");
 
-        _gaugeViewController.onStop();
+        if (_gaugeViewController != null) {
+            _gaugeViewController.onStop();
+        }
 
         FrameLayout preview = (FrameLayout) findViewById(R.id.camera_preview);
         if (preview != null) {
             preview.removeView(_preview);
         }
         _preview = null;
-
-        cancelCurrentPreview();
 
         _gaugeView = null;
 
@@ -157,19 +162,8 @@ public class MainActivity extends AppCompatActivity implements ICameraPreviewSta
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
 
-        // Refresh is only visible in monitor mode
-        MenuItem refresh = menu.findItem(R.id.action_refresh);
-        refresh.setVisible(false);
-
-        if (_gaugeViewController instanceof MonitorController) {
-            refresh.setVisible(true);
-
-            MenuItem monitor = menu.findItem(R.id.action_monitor);
-            monitor.setVisible(false);
-        }
-        else if (_gaugeViewController instanceof PanZoomController) {
-            MenuItem panZoom = menu.findItem(R.id.action_pan_zoom);
-            panZoom.setVisible(false);
+        if (_gaugeViewController != null) {
+            _gaugeViewController.onCreateOptionsMenu(menu);
         }
 
         return true;
@@ -194,13 +188,11 @@ public class MainActivity extends AppCompatActivity implements ICameraPreviewSta
 
         if (id == R.id.action_monitor) {
             Log.d(TAG, "Switching to monitor controller");
-            changeGaugeViewController(new MonitorController());
+            changeGaugeViewController(new MonitorController(_gaugeView, _image));
             return true;
         }
 
-        if (id == R.id.action_refresh) {
-            Log.d(TAG, "Refreshing");
-            restartPreviewCallback(1);
+        if (_gaugeViewController != null && _gaugeViewController.onOptionsItemSelected(item)) {
             return true;
         }
 
@@ -209,12 +201,12 @@ public class MainActivity extends AppCompatActivity implements ICameraPreviewSta
 
     @Override
     public void onPreviewStatusChanged(boolean running) {
-        if (running) {
-            // Give it a second to get going
-            restartPreviewCallback(1000);
-        }
-        else {
-            cancelCurrentPreview();
+        if (_gaugeViewController != null) {
+            if (running) {
+                _gaugeViewController.onStart(_camera);
+            } else {
+                _gaugeViewController.onStop();
+            }
         }
     }
 
@@ -224,42 +216,14 @@ public class MainActivity extends AppCompatActivity implements ICameraPreviewSta
         }
 
         _gaugeViewController = newController;
-        _gaugeViewController.onStart();
+        _gaugeViewController.onStart(_camera);
 
         _gaugeView.setController(_gaugeViewController);
         supportInvalidateOptionsMenu();
-
-        restartPreviewCallback(1);
-    }
-
-    private void cancelCurrentPreview() {
-        if (_scheduledPreview != null)
-        {
-            _gaugeView.removeCallbacks(_scheduledPreview);
-            _scheduledPreview = null;
-        }
-        _camera.cancelAutoFocus();
-        _camera.setPreviewCallbackWithBuffer(null);
-        _camera.setOneShotPreviewCallback(null);
-    }
-
-    private void restartPreviewCallback(int forceDelay) {
-        cancelCurrentPreview();
-
-        int delay = _gaugeViewController.imageRefreshDelay();
-
-        if (delay == 0) {
-            new BufferedPreviewCallback();
-        }
-        else if (delay > 0) {
-            _scheduledPreview = new OneShotPreviewCallback();
-            _gaugeView.postDelayed(_scheduledPreview, forceDelay > 0 ? forceDelay : delay);
-        }
     }
 
     private void releaseCamera(){
         if (_camera != null){
-            cancelCurrentPreview();
             _camera.release();
             _camera = null;
         }
@@ -286,56 +250,5 @@ public class MainActivity extends AppCompatActivity implements ICameraPreviewSta
         }
 
         return false;
-    }
-
-    private class OneShotPreviewCallback implements Runnable, Camera.PreviewCallback, Camera.AutoFocusCallback {
-        @Override
-        public void run() {
-            _scheduledPreview = null;
-            Log.d(TAG, "OneShotPreviewCallback starting autofocus");
-            try {
-                _camera.autoFocus(this);
-            }
-            catch (RuntimeException e) {
-                Log.e(TAG, "Autofocus failed, rescheduling", e);
-                restartPreviewCallback(5000);
-            }
-        }
-
-        @Override
-        public void onAutoFocus(boolean success, Camera camera) {
-            if (success) {
-                Log.d(TAG, "Autofocus successful, getting picture");
-                _camera.setOneShotPreviewCallback(this);
-            }
-            else
-            {
-                Log.e(TAG, "Autofocus not successful, rescheduling");
-                restartPreviewCallback(5000);
-            }
-        }
-
-        @Override
-        public void onPreviewFrame(byte[] data, Camera camera) {
-            Log.d(TAG, "Got one shot preview frame ");
-            _image.updateImage(data);
-            _gaugeView.invalidate();
-            restartPreviewCallback(0);
-        }
-    }
-
-    private class BufferedPreviewCallback implements Camera.PreviewCallback {
-        public BufferedPreviewCallback() {
-            int bitsPerPixel = ImageFormat.getBitsPerPixel(ImageFormat.NV21);
-            _camera.addCallbackBuffer(new byte[(_image.getWidth() * _image.getHeight() * bitsPerPixel) / 8]);
-            _camera.setPreviewCallbackWithBuffer(this);
-        }
-
-        @Override
-        public void onPreviewFrame(byte[] data, Camera camera) {
-            _image.updateImage(data);
-            _gaugeView.invalidate();
-            _camera.addCallbackBuffer(data);
-        }
     }
 }

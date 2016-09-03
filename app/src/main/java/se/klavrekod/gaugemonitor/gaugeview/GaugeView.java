@@ -82,7 +82,7 @@ public class GaugeView extends View {
                 Log.d(TAG, "Initial matrix: " + _drawMatrix + " scale " + scale);
             }
 
-            Bitmap bitmap = _image.getBitmap();
+            Bitmap bitmap = _image.getPreviewBitmap();
             if (bitmap != null) {
 //                Log.d(TAG, "Drawing " + bitmap + " with "  + _drawMatrix);
                 canvas.drawBitmap(bitmap, _drawMatrix, _bitmapPaint);

@@ -1,12 +1,17 @@
 package se.klavrekod.gaugemonitor.gaugeview;
 
+import android.graphics.ImageFormat;
 import android.graphics.Matrix;
+import android.hardware.Camera;
 import android.util.Log;
 import android.view.GestureDetector;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 
 import se.klavrekod.gaugemonitor.GaugeImage;
+import se.klavrekod.gaugemonitor.R;
 
 /** GaugeView controller to pan and zoom the gauge image
  *
@@ -15,12 +20,13 @@ import se.klavrekod.gaugemonitor.GaugeImage;
  */
 public class PanZoomController
         extends GestureDetector.SimpleOnGestureListener
-        implements IGaugeViewController, ScaleGestureDetector.OnScaleGestureListener {
+        implements IGaugeViewController, ScaleGestureDetector.OnScaleGestureListener, Camera.PreviewCallback {
 
     private final static String TAG = "GM:PanZoomController";
 
-    private final GaugeView _view;
+    private final GaugeView _gaugeView;
     private final GaugeImage _image;
+    private Camera _camera;
     private final GestureDetector _gestureDetector;
     private final ScaleGestureDetector _scaleGestureDetector;
 
@@ -29,7 +35,7 @@ public class PanZoomController
 
     public PanZoomController(GaugeView view, GaugeImage image)
     {
-        _view = view;
+        _gaugeView = view;
         _image = image;
 
         _gestureDetector = new GestureDetector(view.getContext(), this);
@@ -39,18 +45,25 @@ public class PanZoomController
     }
 
     @Override
-    public int imageRefreshDelay() {
-        // Continuous refresh
-        return 0;
-    }
+    public void onStart(Camera camera) {
+        _camera = camera;
 
-    @Override
-    public void onStart() {
+        int bitsPerPixel = ImageFormat.getBitsPerPixel(ImageFormat.NV21);
+        _camera.addCallbackBuffer(new byte[(_image.getWidth() * _image.getHeight() * bitsPerPixel) / 8]);
+        _camera.setPreviewCallbackWithBuffer(this);
     }
 
     @Override
     public void onStop() {
+        _camera.setPreviewCallbackWithBuffer(null);
         updateImagePosition();
+    }
+
+    @Override
+    public void onPreviewFrame(byte[] data, Camera camera) {
+        _image.updatePreviewImage(data);
+        _gaugeView.invalidate();
+        _camera.addCallbackBuffer(data);
     }
 
     @Override
@@ -68,21 +81,35 @@ public class PanZoomController
     }
 
     @Override
+    public void onCreateOptionsMenu(Menu menu) {
+        MenuItem refresh = menu.findItem(R.id.action_refresh);
+        refresh.setVisible(false);
+
+        MenuItem panZoom = menu.findItem(R.id.action_pan_zoom);
+        panZoom.setVisible(false);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        return false;
+    }
+
+    @Override
     public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
-        Matrix drawMatrix = _view.getDrawMatrix();
+        Matrix drawMatrix = _gaugeView.getDrawMatrix();
         if (drawMatrix == null) {
             return false;
         }
 
         drawMatrix.postTranslate(-distanceX, -distanceY);
-        _view.setDrawMatrix(drawMatrix);
+        _gaugeView.setDrawMatrix(drawMatrix);
         return true;
     }
 
     @Override
     public boolean onScaleBegin(ScaleGestureDetector detector) {
 
-        if (_view.getDrawMatrix() == null) {
+        if (_gaugeView.getDrawMatrix() == null) {
             return false;
         }
 
@@ -112,9 +139,9 @@ public class PanZoomController
         _lastFocusX = focusX;
         _lastFocusY = focusY;
 
-        Matrix drawMatrix = _view.getDrawMatrix();
+        Matrix drawMatrix = _gaugeView.getDrawMatrix();
         drawMatrix.postConcat(transformationMatrix);
-        _view.setDrawMatrix(drawMatrix);
+        _gaugeView.setDrawMatrix(drawMatrix);
 
         return true;
     }
@@ -128,7 +155,7 @@ public class PanZoomController
      */
     private void updateImagePosition() {
         float[] values = new float[9];
-        _view.getDrawMatrix().getValues(values);
+        _gaugeView.getDrawMatrix().getValues(values);
 
         float scale = values[Matrix.MSCALE_X];
         float transX = values[Matrix.MTRANS_X];
@@ -136,8 +163,8 @@ public class PanZoomController
 
         Log.d(TAG, "Setting image from trans " + transX + " " + transY + " scale " + scale);
 
-        float viewCenterX = _view.getWidth() * 0.5f;
-        float viewCenterY = _view.getHeight() * 0.5f;
+        float viewCenterX = _gaugeView.getWidth() * 0.5f;
+        float viewCenterY = _gaugeView.getHeight() * 0.5f;
 
         float scaledWidth = _image.getWidth() * scale;
         float scaledHeight = _image.getHeight() * scale;
@@ -148,7 +175,7 @@ public class PanZoomController
         // Translate into values relative gauge image
         _image.setCenterX(absImageCenterX / scaledWidth);
         _image.setCenterY(absImageCenterY / scaledHeight);
-        _image.setScale(scale * _image.getHeight() / _view.getHeight());
+        _image.setScale(scale * _image.getHeight() / _gaugeView.getHeight());
 
         Log.d(TAG, "New image position: " + _image.getCenterX() + " " + _image.getCenterY() + " scale " + _image.getScale());
     }
