@@ -37,6 +37,7 @@ public class MonitorController implements IGaugeViewController {
     @Override
     public void onStop() {
         cancelCurrentPreview();
+        _camera = null;
     }
 
     @Override
@@ -64,8 +65,10 @@ public class MonitorController implements IGaugeViewController {
     private void restartPreviewCallback(int delay) {
         cancelCurrentPreview();
 
-        _scheduledPreview = new OneShotPreviewCallback();
-        _gaugeView.postDelayed(_scheduledPreview, delay);
+        if (_camera != null) {
+            _scheduledPreview = new OneShotPreviewCallback();
+            _gaugeView.postDelayed(_scheduledPreview, delay);
+        }
     }
 
     private void cancelCurrentPreview() {
@@ -74,14 +77,32 @@ public class MonitorController implements IGaugeViewController {
             _gaugeView.removeCallbacks(_scheduledPreview);
             _scheduledPreview = null;
         }
-        _camera.cancelAutoFocus();
-        _camera.setOneShotPreviewCallback(null);
+
+        if (_camera != null) {
+            _camera.cancelAutoFocus();
+            _camera.setOneShotPreviewCallback(null);
+            setFlashMode(Camera.Parameters.FLASH_MODE_OFF);
+        }
+    }
+
+    private void setFlashMode(String mode) {
+        Camera.Parameters parameters = _camera.getParameters();
+        parameters.setFlashMode(mode);
+        try {
+            _camera.setParameters(parameters);
+        }
+        catch (RuntimeException e) {
+            Log.e(TAG, "Failed to set flash mode " + mode, e);
+        }
     }
 
     private class OneShotPreviewCallback implements Runnable, Camera.PreviewCallback, Camera.AutoFocusCallback {
         @Override
         public void run() {
             _scheduledPreview = null;
+
+            setFlashMode(Camera.Parameters.FLASH_MODE_TORCH);
+
             Log.d(TAG, "OneShotPreviewCallback starting autofocus");
             try {
                 _camera.autoFocus(this);

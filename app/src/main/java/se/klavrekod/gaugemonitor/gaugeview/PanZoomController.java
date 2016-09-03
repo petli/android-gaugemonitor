@@ -51,11 +51,16 @@ public class PanZoomController
         int bitsPerPixel = ImageFormat.getBitsPerPixel(ImageFormat.NV21);
         _camera.addCallbackBuffer(new byte[(_image.getWidth() * _image.getHeight() * bitsPerPixel) / 8]);
         _camera.setPreviewCallbackWithBuffer(this);
+        setFlashMode(Camera.Parameters.FLASH_MODE_TORCH);
     }
 
     @Override
     public void onStop() {
-        _camera.setPreviewCallbackWithBuffer(null);
+        if (_camera != null) {
+            _camera.setPreviewCallbackWithBuffer(null);
+            setFlashMode(Camera.Parameters.FLASH_MODE_OFF);
+        }
+
         updateImagePosition();
     }
 
@@ -178,5 +183,16 @@ public class PanZoomController
         _image.setScale(scale * _image.getHeight() / _gaugeView.getHeight());
 
         Log.d(TAG, "New image position: " + _image.getCenterX() + " " + _image.getCenterY() + " scale " + _image.getScale());
+    }
+
+    private void setFlashMode(String mode) {
+        Camera.Parameters parameters = _camera.getParameters();
+        parameters.setFlashMode(mode);
+        try {
+            _camera.setParameters(parameters);
+        }
+        catch (RuntimeException e) {
+            Log.e(TAG, "Failed to set flash mode " + mode, e);
+        }
     }
 }
